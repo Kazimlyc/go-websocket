@@ -7,3 +7,15 @@ type client struct {
 	receive chan []byte
 	room    *room
 }
+
+func (c *client) read() {
+	for {
+
+		_, msg, err := c.socket.ReadMessage()
+
+		if err != nil {
+			return
+		}
+		c.room.forward <- msg
+	}
+}
