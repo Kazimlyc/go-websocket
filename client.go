@@ -19,3 +19,14 @@ func (c *client) read() {
 		c.room.forward <- msg
 	}
 }
+
+func (c *client) write() {
+	defer c.socket.Close()
+
+	for msg := range c.receive {
+		err := c.socket.WriteMessage(websocket.TextMessage, msg)
+		if err != nil {
+			return
+		}
+	}
+}
