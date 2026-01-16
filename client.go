@@ -3,7 +3,7 @@ package main
 import "github.com/gofiber/websocket/v2"
 
 type client struct {
-	scoker  *websocket.Conn
+	socket  *websocket.Conn
 	receive chan []byte
 	room    *room
 }
@@ -16,7 +16,7 @@ func (c *client) read() {
 		if err != nil {
 			return
 		}
-		c.room.forward <- msg
+		c.room.forward <- message{sender: c, data: msg}
 	}
 }
 

@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Go WebSocket Chat</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg-1: #f8f4ea;
+        --bg-2: #f3e7d8;
+        --ink: #1b1b1b;
+        --accent: #ff6b35;
+        --accent-2: #2ec4b6;
+        --panel: #ffffff;
+        --muted: #5c5c5c;
+        --shadow: 0 20px 50px rgba(0, 0, 0, 0.12);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+        color: var(--ink);
+        background: radial-gradient(1200px 600px at 10% 10%, #fff4d6, transparent),
+          radial-gradient(900px 700px at 90% 20%, #e2f7f5, transparent),
+          linear-gradient(160deg, var(--bg-1), var(--bg-2));
+        display: grid;
+        place-items: center;
+        padding: 24px;
+      }
+
+      .shell {
+        width: min(900px, 100%);
+        background: var(--panel);
+        border-radius: 24px;
+        box-shadow: var(--shadow);
+        overflow: hidden;
+        display: grid;
+        grid-template-columns: 1fr;
+      }
+
+      .header {
+        padding: 20px 24px;
+        background: linear-gradient(135deg, #fff1e1, #fff);
+        border-bottom: 1px solid #f0e0d0;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: var(--accent);
+        box-shadow: 0 0 0 6px rgba(255, 107, 53, 0.15);
+      }
+
+      .title {
+        font-weight: 700;
+        letter-spacing: 0.5px;
+      }
+
+      .status {
+        margin-left: auto;
+        font-size: 14px;
+        color: var(--muted);
+      }
+
+      .chat {
+        padding: 24px;
+        height: min(60vh, 520px);
+        overflow-y: auto;
+        background: #fffaf2;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .bubble {
+        max-width: 72%;
+        padding: 12px 14px;
+        border-radius: 16px;
+        line-height: 1.3;
+        font-size: 15px;
+        background: #f4f4f4;
+      }
+
+      .bubble.you {
+        align-self: flex-end;
+        background: linear-gradient(135deg, #ffb28a, #ff6b35);
+        color: #1b0f0a;
+      }
+
+      .bubble.system {
+        align-self: center;
+        background: #ecf8f7;
+        color: #1a4b46;
+        font-size: 13px;
+      }
+
+      .composer {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 12px;
+        padding: 16px 20px 20px;
+        border-top: 1px solid #f0e0d0;
+        background: #fff;
+      }
+
+      input[type="text"] {
+        border: 1px solid #e0d7cc;
+        border-radius: 999px;
+        padding: 12px 16px;
+        font-size: 15px;
+        outline: none;
+      }
+
+      input[type="text"]:focus {
+        border-color: var(--accent-2);
+        box-shadow: 0 0 0 4px rgba(46, 196, 182, 0.2);
+      }
+
+      button {
+        border: none;
+        border-radius: 999px;
+        padding: 12px 20px;
+        font-weight: 600;
+        background: var(--accent-2);
+        color: #0f2a27;
+        cursor: pointer;
+        transition: transform 120ms ease, box-shadow 120ms ease;
+        box-shadow: 0 8px 20px rgba(46, 196, 182, 0.25);
+      }
+
+      button:active {
+        transform: translateY(1px);
+      }
+
+      @media (max-width: 640px) {
+        .chat {
+          height: 60vh;
+          padding: 16px;
+        }
+        .bubble {
+          max-width: 84%;
+        }
+        .composer {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <div class="header">
+        <span class="dot" aria-hidden="true"></span>
+        <div class="title">Go WebSocket Chat</div>
+        <div id="status" class="status">Baglaniyor...</div>
+      </div>
+      <div id="chat" class="chat"></div>
+      <form id="composer" class="composer" autocomplete="off">
+        <input
+          id="message"
+          type="text"
+          placeholder="Mesaj yaz..."
+          maxlength="512"
+          required
+        />
+        <button type="submit">Gonder</button>
+      </form>
+    </div>
+
+    <script>
+      const chat = document.getElementById("chat");
+      const form = document.getElementById("composer");
+      const input = document.getElementById("message");
+      const status = document.getElementById("status");
+
+      const protocol = location.protocol === "https:" ? "wss" : "ws";
+      const socketUrl = `${protocol}://${location.host}/ws`;
+      const socket = new WebSocket(socketUrl);
+
+      const addBubble = (text, type) => {
+        const bubble = document.createElement("div");
+        bubble.className = `bubble ${type || ""}`.trim();
+        bubble.textContent = text;
+        chat.appendChild(bubble);
+        chat.scrollTop = chat.scrollHeight;
+      };
+
+      socket.addEventListener("open", () => {
+        status.textContent = "Baglandi";
+        addBubble("Baglanti kuruldu.", "system");
+      });
+
+      socket.addEventListener("close", () => {
+        status.textContent = "Kopuk";
+        addBubble("Baglanti koptu.", "system");
+      });
+
+      socket.addEventListener("error", () => {
+        status.textContent = "Hata";
+        addBubble("Baglanti hatasi.", "system");
+      });
+
+      socket.addEventListener("message", (event) => {
+        addBubble(event.data, "them");
+      });
+
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        if (!input.value.trim()) return;
+        socket.send(input.value);
+        addBubble(input.value, "you");
+        input.value = "";
+        input.focus();
+      });
+    </script>
+  </body>
+</html>
