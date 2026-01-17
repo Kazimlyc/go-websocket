@@ -1,11 +1,17 @@
 package main
 
-import "github.com/gofiber/websocket/v2"
+import (
+	"encoding/json"
+	"fmt"
+
+	"github.com/gofiber/websocket/v2"
+)
 
 type client struct {
 	socket  *websocket.Conn
 	receive chan []byte
 	room    *room
+	name    string
 }
 
 func (c *client) read() {
@@ -16,7 +22,19 @@ func (c *client) read() {
 		if err != nil {
 			return
 		}
-		c.room.forward <- message{sender: c, data: msg}
+
+		//c.room.forward <- message{sender: c, data: msg}
+		outgoing := map[string]string{
+			"name":    c.name,
+			"message": string(msg),
+		}
+		jsMessage, err := json.Marshal(outgoing)
+		if err != nil {
+			fmt.Println("encoding failed", err)
+			continue
+		}
+
+		c.room.forward <- message{sender: c, data: jsMessage}
 	}
 }
 

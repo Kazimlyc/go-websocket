@@ -19,6 +19,10 @@ func main() {
 	log.Println("Starting web server on:", *addr)
 
 	app.Get("/", func(c *fiber.Ctx) error {
+		return c.SendFile("index.html")
+	})
+
+	app.Get("/chat.html", func(c *fiber.Ctx) error {
 		return c.SendFile("chat.html")
 	})
 

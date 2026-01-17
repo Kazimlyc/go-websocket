@@ -1,6 +1,12 @@
 package main
 
-import "github.com/gofiber/websocket/v2"
+import (
+	"fmt"
+	"math/rand/v2"
+	"sync"
+
+	"github.com/gofiber/websocket/v2"
+)
 
 type room struct {
 	clients map[*client]bool
@@ -42,21 +48,52 @@ func (r *room) run() {
 	}
 }
 
+var rooms = make(map[string]*room)
+
+var mu sync.Mutex
+
+func getRoom(name string) *room {
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	if r, ok := rooms[name]; ok {
+		return r
+	}
+	r := newRoom()
+	rooms[name] = r
+
+	go r.run()
+	return r
+
+}
+
 const (
-	socketBufferSize  = 1024
 	messageBufferSize = 256
 )
 
 func (r *room) Serve(socket *websocket.Conn) {
+	roomName := socket.Query("room")
+	if roomName == "" {
+		_ = socket.WriteMessage(websocket.TextMessage, []byte("room name required"))
+		_ = socket.Close()
+		return
+	}
+	realRoom := getRoom(roomName)
+	name := socket.Query("name")
+	if name == "" {
+		name = fmt.Sprintf("USER_%d", rand.Int())
+	}
 
 	client := &client{
 		socket:  socket,
 		receive: make(chan []byte, messageBufferSize),
-		room:    r,
+		room:    realRoom,
+		name:    name,
 	}
 
-	r.join <- client
-	defer func() { r.leave <- client }()
+	realRoom.join <- client
+	defer func() { realRoom.leave <- client }()
 
 	go client.write()
 	client.read()

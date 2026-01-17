@@ -77,6 +77,23 @@
         color: var(--muted);
       }
 
+      .room {
+        font-size: 13px;
+        color: var(--muted);
+      }
+
+      .leave {
+        margin-left: 12px;
+        border: none;
+        border-radius: 999px;
+        padding: 8px 14px;
+        font-size: 13px;
+        font-weight: 600;
+        background: #ffe1d1;
+        color: #5a2916;
+        cursor: pointer;
+      }
+
       .chat {
         padding: 24px;
         height: min(60vh, 520px);
@@ -100,6 +117,12 @@
         align-self: flex-end;
         background: linear-gradient(135deg, #ffb28a, #ff6b35);
         color: #1b0f0a;
+      }
+
+      .bubble.them {
+        align-self: flex-start;
+        background: #f3f6ff;
+        color: #1c2440;
       }
 
       .bubble.system {
@@ -165,8 +188,12 @@
     <div class="shell">
       <div class="header">
         <span class="dot" aria-hidden="true"></span>
-        <div class="title">Go WebSocket Chat</div>
+        <div>
+          <div class="title">Go WebSocket Chat</div>
+          <div id="roomName" class="room"></div>
+        </div>
         <div id="status" class="status">Baglaniyor...</div>
+        <button id="leave" class="leave" type="button">Cikis</button>
       </div>
       <div id="chat" class="chat"></div>
       <form id="composer" class="composer" autocomplete="off">
@@ -186,10 +213,24 @@
       const form = document.getElementById("composer");
       const input = document.getElementById("message");
       const status = document.getElementById("status");
+      const roomName = document.getElementById("roomName");
+      const leaveButton = document.getElementById("leave");
+
+      const params = new URLSearchParams(window.location.search);
+      const room = params.get("room");
+      const name = params.get("name") || "";
+
+      if (room) {
+        roomName.textContent = `Oda: ${room}`;
+      } else {
+        roomName.textContent = "Oda bulunamadi";
+      }
 
       const protocol = location.protocol === "https:" ? "wss" : "ws";
-      const socketUrl = `${protocol}://${location.host}/ws`;
-      const socket = new WebSocket(socketUrl);
+      const socketUrl = `${protocol}://${location.host}/ws?room=${encodeURIComponent(
+        room || ""
+      )}&name=${encodeURIComponent(name)}`;
+      const socket = room ? new WebSocket(socketUrl) : null;
 
       const addBubble = (text, type) => {
         const bubble = document.createElement("div");
@@ -199,32 +240,55 @@
         chat.scrollTop = chat.scrollHeight;
       };
 
-      socket.addEventListener("open", () => {
-        status.textContent = "Baglandi";
-        addBubble("Baglanti kuruldu.", "system");
+      if (socket) {
+        socket.addEventListener("open", () => {
+          status.textContent = "Baglandi";
+          addBubble("Baglanti kuruldu.", "system");
+        });
+
+        socket.addEventListener("close", () => {
+          status.textContent = "Kopuk";
+          addBubble("Baglanti koptu.", "system");
+        });
+
+        socket.addEventListener("error", () => {
+          status.textContent = "Hata";
+          addBubble("Baglanti hatasi.", "system");
+        });
+
+        socket.addEventListener("message", (event) => {
+          let display = event.data;
+          try {
+            const parsed = JSON.parse(event.data);
+            if (parsed && parsed.message) {
+              const who = parsed.name || "Anon";
+              display = `${who}: ${parsed.message}`;
+            }
+          } catch (_) {}
+          addBubble(display, "them");
+        });
+
+        form.addEventListener("submit", (event) => {
+          event.preventDefault();
+          if (!input.value.trim()) return;
+          socket.send(input.value);
+          addBubble(input.value, "you");
+          input.value = "";
+          input.focus();
+        });
+      } else {
+        status.textContent = "Room yok";
+        input.disabled = true;
+        addBubble("Oda parametresi eksik.", "system");
+      }
+
+      leaveButton.addEventListener("click", () => {
+        if (socket) socket.close(1000, "left");
+        window.location.href = "/";
       });
 
-      socket.addEventListener("close", () => {
-        status.textContent = "Kopuk";
-        addBubble("Baglanti koptu.", "system");
-      });
-
-      socket.addEventListener("error", () => {
-        status.textContent = "Hata";
-        addBubble("Baglanti hatasi.", "system");
-      });
-
-      socket.addEventListener("message", (event) => {
-        addBubble(event.data, "them");
-      });
-
-      form.addEventListener("submit", (event) => {
-        event.preventDefault();
-        if (!input.value.trim()) return;
-        socket.send(input.value);
-        addBubble(input.value, "you");
-        input.value = "";
-        input.focus();
+      window.addEventListener("beforeunload", () => {
+        if (socket) socket.close();
       });
     </script>
   </body>
